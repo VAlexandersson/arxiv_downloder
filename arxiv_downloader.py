@@ -2,6 +2,12 @@ import os
 import re
 import requests
 from bs4 import BeautifulSoup
+import bisect
+
+papers_dir = 'arxiv_papers/'
+
+if not os.path.exists(papers_dir):
+    os.makedirs(papers_dir)
 
 def extract_title_from_arxiv(arxiv_id):
   arxiv_url = f"https://arxiv.org/abs/{arxiv_id}"
@@ -24,7 +30,7 @@ def download_arxiv_pdf(arxiv_id, title):
     pdf_filename = re.sub(r'Title_', '', pdf_filename)
     pdf_filename += f" ({arxiv_id}).pdf"
     
-    with open(pdf_filename, "wb") as file:
+    with open(f'{papers_dir}{pdf_filename}', "wb") as file:
       file.write(response.content)
     print(f"Downloaded: {pdf_filename}")
     return True
@@ -35,23 +41,33 @@ def download_arxiv_pdf(arxiv_id, title):
 def process_arxiv_ids_file(file_path, completed_file_path):
   with open(file_path, 'r') as file:
     arxiv_ids = file.read().split()
-      
-  completed_ids = []
-  
+    
+  with open(completed_file_path, 'r') as file:
+    completed_ids = file.read().split()
+
+  to_process_ids = []
   for arxiv_id in arxiv_ids:
+    if arxiv_id in completed_ids:
+      print(f"Already downloaded: {arxiv_id}")
+    else:
+      to_process_ids.append(arxiv_id)
+
+  for arxiv_id in to_process_ids:
+
     title = extract_title_from_arxiv(arxiv_id)
     if title:
       if(download_arxiv_pdf(arxiv_id, title)):
-        completed_ids.append(arxiv_id)
+        bisect.insort(completed_ids, arxiv_id)
     else:
       print(f"Error retrieving title for: {arxiv_id}")
       
-  with open(completed_file_path, 'a') as file:
-    file.write('\n'.join(completed_ids) + '\n')
+  with open(completed_file_path, 'w') as file:
+    for id in completed_ids:
+      file.write(id + '\n')
 
-  remaining_ids = [arxiv_id for arxiv_id in arxiv_ids if arxiv_id not in completed_ids]
   with open(file_path, 'w') as file:
-    file.write(' '.join(remaining_ids))
+    for id in to_process_ids:
+      file.write(id + '\n')
 
 arxiv_ids_file = 'arxiv_ids.txt'
 completed_ids_file = 'completed_ids.txt'
