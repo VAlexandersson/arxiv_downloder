@@ -1,11 +1,11 @@
+import argparse
+import bisect
 import os
 import re
 import requests
 from bs4 import BeautifulSoup
-import bisect
 
 papers_dir = 'arxiv_papers/'
-
 if not os.path.exists(papers_dir):
     os.makedirs(papers_dir)
 
@@ -38,37 +38,45 @@ def download_arxiv_pdf(arxiv_id, title):
     print(f"Error downloading: {arxiv_id}")
     return False
 
-def process_arxiv_ids_file(file_path, completed_file_path):
-  with open(file_path, 'r') as file:
-    arxiv_ids = file.read().split()
-    
-  with open(completed_file_path, 'r') as file:
-    completed_ids = file.read().split()
-
-  to_process_ids = []
-  for arxiv_id in arxiv_ids:
-    if arxiv_id in completed_ids:
-      print(f"Already downloaded: {arxiv_id}")
-    else:
-      to_process_ids.append(arxiv_id)
-
-  for arxiv_id in to_process_ids:
-
+def process_arxiv_id(arxiv_id, completed_ids):
+  if arxiv_id in completed_ids:
+    print(f"Already downloaded: {arxiv_id}")
+  else:
     title = extract_title_from_arxiv(arxiv_id)
     if title:
       if(download_arxiv_pdf(arxiv_id, title)):
         bisect.insort(completed_ids, arxiv_id)
+        return True
     else:
       print(f"Error retrieving title for: {arxiv_id}")
-      
-  with open(completed_file_path, 'w') as file:
-    for id in completed_ids:
-      file.write(id + '\n')
+  return False
 
-  with open(file_path, 'w') as file:
-    for id in to_process_ids:
-      file.write(id + '\n')
+arxiv_ids_file_path = 'arxiv_ids.txt'
+completed_ids_file_path = 'completed_ids.txt'
 
-arxiv_ids_file = 'arxiv_ids.txt'
-completed_ids_file = 'completed_ids.txt'
-process_arxiv_ids_file(arxiv_ids_file, completed_ids_file)
+parser = argparse.ArgumentParser(description='Download papers from arXiv.')
+parser.add_argument('-f', '--file', metavar='file', type=str, default=arxiv_ids_file_path, help='path to a file containing arXiv IDs.')
+parser.add_argument('-i', '--ids', metavar='ids', nargs='+', type=str, help='list of arXiv IDs')
+
+args = parser.parse_args()
+
+with open(completed_ids_file_path, 'r') as file:
+  completed_ids = file.read().split()
+
+arxiv_ids = []
+
+if args.ids:
+  arxiv_ids = args.ids
+elif args.file:
+  with open(args.file, 'r') as file:
+    arxiv_ids = file.read().split()
+
+ids_added = 0
+for arxiv_id in arxiv_ids:
+  if process_arxiv_id(arxiv_id, completed_ids):
+    ids_added += 1
+
+if ids_added > 0:
+  with open(completed_ids_file_path, 'w') as file:
+    for arxiv_id in completed_ids:
+      file.write(arxiv_id + '\n')
